@@ -1,0 +1,7 @@
+# Runtime dependencies for the Adaptive Systems assignment.
+# Install with:  pip install -r requirements.txt
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
+gensim>=4.3
+nltk>=3.8
