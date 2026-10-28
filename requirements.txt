@@ -5,3 +5,4 @@ numpy>=1.24
 scipy>=1.10
 gensim>=4.3
 nltk>=3.8
+streamlit>=1.40

@@ -1,25 +1,24 @@
-"""
-Adaptive Systems - version simple du projet.
+"""Adaptive Systems - simple version of the project.
 
-Ce fichier répond aux tâches 1 à 4 de l'énoncé :
+This file addresses tasks 1 through 4 of the assignment:
 
-1. TF-IDF sur les descriptions + calcul de ratio_quality pour "Food & Drink".
-2. Même chose avec LDA (30 topics, 2 passes, random_state=30).
-3. Même chose pour "Sports" et comparaison avec "Food & Drink".
-4. Similarité entre articles à partir des tags (Jaccard).
+1. TF-IDF on descriptions + ratio_quality calculation for "Food & Drink".
+2. The same with LDA (30 topics, 2 passes, random_state=30).
+3. The same for "Sports" and comparison with "Food & Drink".
+4. Article similarity based on tags (Jaccard and TF-IDF + cosine).
 
-La tâche 5 est une question de conception (RS content-based) : elle est
-rédactionnelle et n'est donc pas codée ici.
+Task 5 is a design question (content-based RS): it requires a written
+answer and is therefore not implemented here.
 
-Choix d'implémentation importants :
+Important implementation choices:
 
-- On utilise Gensim pour Dictionary, TF-IDF, LDA et MatrixSimilarity.
-- On utilise NLTK pour la tokenisation et le stemming.
-- On garde volontairement un seul fichier : c'est plus simple à expliquer.
-- On suit le pseudo-code de l'énoncé littéralement, donc l'article lui-même
-  peut apparaître dans ses propres 10 plus proches voisins (similarité 1.0).
-  C'est ce que fait le pseudo-code. Si on veut une mesure plus
-  honnête, il suffit de mettre `exclude_self=True` dans `ratio_quality`.
+- Use Gensim for Dictionary, TF-IDF, LDA, and MatrixSimilarity.
+- Use NLTK for tokenization and stemming.
+- Deliberately keep a single file to make the project easier to explain.
+- Follow the assignment pseudocode literally, so an article may appear
+  among its own 10 nearest neighbors (similarity 1.0).
+  This is what the pseudocode does. For a more realistic measure,
+  simply set `exclude_self=True` in `ratio_quality`.
 """
 
 import time
@@ -32,48 +31,48 @@ from nltk.stem import PorterStemmer
 from nltk.tokenize import wordpunct_tokenize
 
 # ---------------------------------------------------------------------------
-# Paramètres de l'expérience
+# Experiment settings
 # ---------------------------------------------------------------------------
 CSV_PATH = "news2.csv"
 FOOD_TOPIC = "Food & Drink"
 SPORTS_TOPIC = "Sports"
 TOP_K = 10
 
-# Le stemming réduit le vocabulaire : "recipes", "recipe" et "reciped" deviennent le même token.
-# Cela rend les vecteurs TF-IDF plus stables.
+# Stemming reduces the vocabulary: "recipes", "recipe", and "reciped" become the same token.
+# This makes TF-IDF vectors more stable.
 STEMMER = PorterStemmer()
 
 
 def preprocess(text):
-    """Transforme une description en liste de tokens normalisés.
+    """Convert a description into a list of normalized tokens.
 
-    Étapes :
-    1. minuscules ;
-    2. tokenisation avec NLTK (wordpunct_tokenize ne nécessite aucun
-       téléchargement de données NLTK, contrairement à word_tokenize) ;
-    3. suppression de la ponctuation et des nombres ;
-    4. suppression des mots trop courts ;
-    5. suppression des stop words (mots très fréquents, peu informatifs) ;
-    6. stemming avec NLTK.
+    Steps:
+    1. lowercase;
+    2. tokenize with NLTK (wordpunct_tokenize requires no NLTK data
+       downloads, unlike word_tokenize);
+    3. remove punctuation and numbers;
+    4. remove tokens that are too short;
+    5. remove stop words (very frequent, uninformative words);
+    6. apply stemming with NLTK.
 
-    On utilise la liste de stop words de Gensim pour éviter d'avoir à
-    télécharger le corpus `stopwords` de NLTK. NLTK reste bien utilisé pour
-    la tokenisation et le stemming, comme demandé dans l'énoncé.
+    Use Gensim's stop word list to avoid downloading NLTK's `stopwords`
+    corpus. NLTK is still used for tokenization and stemming, as required
+    by the assignment.
     """
 
     tokens = wordpunct_tokenize(str(text).lower())
 
     cleaned = []
     for token in tokens:
-        # On ne garde que les suites de lettres (pas de "123", "!", etc.).
+        # Keep only sequences of letters (no "123", "!", etc.).
         if not token.isalpha():
             continue
 
-        # Un token d'une seule lettre est presque toujours du bruit.
+        # A single-letter token is almost always noise.
         if len(token) < 2:
             continue
 
-        # Les stop words apparaissent partout et n'aident pas à distinguer les sujets.
+        # Stop words appear everywhere and do not help distinguish topics.
         if token in STOPWORDS:
             continue
 
@@ -83,11 +82,10 @@ def preprocess(text):
 
 
 def load_data():
-    """Charge le CSV et supprime les lignes inutilisables.
+    """Load the CSV and remove unusable rows.
 
-    On supprime les descriptions vides car elles ne peuvent pas produire de
-    vecteur. On réinitialise l'index pour que la position dans les listes
-    corresponde bien à la position dans le DataFrame.
+    Remove empty descriptions because they cannot produce a vector.
+    Reset the index so list positions match positions in the DataFrame.
     """
 
     df = pd.read_csv(CSV_PATH)
@@ -103,40 +101,40 @@ def load_data():
 
 
 def build_tfidf(descriptions):
-    """Construit le modèle TF-IDF et l'index de similarité.
+    """Build the TF-IDF model and similarity index.
 
-    Retourne :
-    - `vectors` : les vecteurs TF-IDF de chaque article ;
-    - `similarity` : l'objet MatrixSimilarity ;
-    - `elapsed` : temps de création du modèle, en secondes.
+    Returns:
+    - `vectors`: the TF-IDF vectors for each article;
+    - `similarity`: the MatrixSimilarity object;
+    - `elapsed`: model creation time in seconds.
 
-    Le chronomètre démarre avant le préprocessing et s'arrête juste après
-    `similarities.MatrixSimilarity(...)`, exactement comme demandé dans
-    l'énoncé.
+    Timing starts before preprocessing and stops immediately after
+    `similarities.MatrixSimilarity(...)`, exactly as required by the
+    assignment.
     """
 
     start = time.perf_counter()
 
-    # 1. Préprocessing de toutes les descriptions.
+    # 1. Preprocess all descriptions.
     texts = [preprocess(description) for description in descriptions]
 
-    # 2. Dictionnaire : associe chaque token à un identifiant entier.
+    # 2. Dictionary: map each token to an integer identifier.
     dictionary = corpora.Dictionary(texts)
 
-    # On enlève les mots qui apparaissent dans moins de 2 documents (bruit)
-    # et ceux qui apparaissent dans plus de 90 % des documents (trop généraux).
+    # Remove words that appear in fewer than 2 documents (noise)
+    # and those appearing in more than 90% of documents (too general).
     dictionary.filter_extremes(no_below=2, no_above=0.9)
 
-    # 3. Bag-of-Words : chaque document devient une liste de (id_token, fréquence).
+    # 3. Bag-of-Words: each document becomes a list of (token_id, frequency).
     bow_corpus = [dictionary.doc2bow(tokens) for tokens in texts]
 
-    # 4. TF-IDF : les mots rares et discriminants prennent plus de poids.
-    # `normalize=True` met les vecteurs à une norme de 1, ce qui est la
-    # configuration habituelle pour la similarité cosinus.
+    # 4. TF-IDF: rare, discriminative words receive more weight.
+    # `normalize=True` gives vectors a norm of 1, which is the
+    # usual configuration for cosine similarity.
     tfidf_model = models.TfidfModel(bow_corpus, normalize=True)
     tfidf_vectors = list(tfidf_model[bow_corpus])
 
-    # 5. Index de similarité : c'est l'appel explicitement demandé.
+    # 5. Similarity index: this is the explicitly required call.
     similarity = similarities.MatrixSimilarity(tfidf_vectors)
 
     elapsed = time.perf_counter() - start
@@ -144,20 +142,20 @@ def build_tfidf(descriptions):
 
 
 def build_lda(descriptions):
-    """Construit le modèle LDA et l'index de similarité.
+    """Build the LDA model and similarity index.
 
-    Paramètres imposés par l'énoncé :
-    - 30 topics ;
-    - 2 passes ;
+    Parameters required by the assignment:
+    - 30 topics;
+    - 2 passes;
     - random_state=30.
 
-    On filtre un peu plus le dictionnaire que pour TF-IDF : LDA est un modèle
-    probabiliste et les mots très rares rendent les topics plus bruités.
+    Filter the dictionary slightly more than for TF-IDF: LDA is a
+    probabilistic model, and very rare words make topics noisier.
     """
 
-    # Comme pour TF-IDF, le chronomètre inclut le préprocessing de ce modèle.
-    # On reste ainsi proche de la définition de l'énoncé : "du début du
-    # programme jusqu'à l'appel à MatrixSimilarity".
+    # As with TF-IDF, timing includes preprocessing for this model.
+    # This stays close to the assignment definition: "from the start of
+    # the program up to the call to MatrixSimilarity".
     start = time.perf_counter()
 
     texts = [preprocess(description) for description in descriptions]
@@ -167,7 +165,7 @@ def build_lda(descriptions):
 
     bow_corpus = [dictionary.doc2bow(tokens) for tokens in texts]
 
-    # Entraînement de LDA.
+    # Train LDA.
     lda_model = models.LdaModel(
         corpus=bow_corpus,
         id2word=dictionary,
@@ -176,9 +174,9 @@ def build_lda(descriptions):
         random_state=30,
     )
 
-    # Chaque document est transformé en distribution sur les 30 topics.
-    # `minimum_probability=0.0` est important : sinon Gensim supprime les
-    # petites probabilités et les vecteurs n'ont plus tous la même dimension.
+    # Each document is transformed into a distribution over the 30 topics.
+    # `minimum_probability=0.0` matters: otherwise Gensim removes small
+    # probabilities and the vectors no longer all have the same dimension.
     lda_vectors = [
         lda_model.get_document_topics(bow, minimum_probability=0.0)
         for bow in bow_corpus
@@ -192,53 +190,53 @@ def build_lda(descriptions):
 
 def ratio_quality(similarity_for_query, labels, topic, top_k=TOP_K,
                   exclude_self=False):
-    """Implémentation du pseudo-code de l'énoncé.
+    """Implement the assignment pseudocode.
 
-    `similarity_for_query(i)` doit renvoyer un tableau de scores : le score
-    entre l'article `i` et tous les articles du corpus.
+    `similarity_for_query(i)` must return an array of scores between
+    article `i` and all articles in the corpus.
 
-    Retourne (ratio_quality, temps_du_pseudo_code, total_goods).
+    Returns (ratio_quality, pseudocode_execution_time, total_goods).
 
-    `exclude_self=False` par défaut : on suit le pseudo-code littéralement.
-    L'article est dans le corpus, donc il est son propre voisin le plus
-    similaire. Cela gonfle un peu le ratio (au moins 1 bon voisin sur 10).
-    Mettre `exclude_self=True` donne une mesure plus réaliste.
+    `exclude_self=False` by default: follow the pseudocode literally.
+    The article is in the corpus, so it is its own most similar neighbor.
+    This slightly inflates the ratio (at least 1 good neighbor out of 10).
+    Set `exclude_self=True` for a more realistic measure.
     """
 
-    # Articles de la section demandée : ce sont les requêtes.
+    # Articles in the requested section serve as queries.
     query_indices = [
         index
         for index, label in enumerate(labels)
         if label == topic
     ]
 
-    # Sécurité : si la section n'existe pas (par exemple avec un sous-corpus
-    # de test), on renvoie zéro au lieu de diviser par zéro.
+    # If the section does not exist (for example in a test subset),
+    # return zero instead of dividing by zero.
     if not query_indices:
         return 0.0, 0.0, 0
 
     total_goods = 0
 
-    # On chronomètre uniquement l'exécution du pseudo-code, pas la création
-    # du modèle.
+    # Time only the execution of the pseudocode, excluding model
+    # creation.
     start = time.perf_counter()
 
     for query_index in query_indices:
-        # Scores de similarité entre la requête et tous les articles.
+        # Similarity scores between the query and all articles.
         scores = np.asarray(similarity_for_query(query_index))
 
-        # argsort trie par ordre croissant ; le signe moins donne l'ordre
-        # décroissant (les plus similaires d'abord).
+        # argsort sorts in ascending order; the minus sign gives descending
+        # order (most similar first).
         ranked = np.argsort(-scores)
 
-        # On peut retirer la requête elle-même de ses voisins.
+        # Optionally remove the query itself from its neighbors.
         if exclude_self:
             ranked = ranked[ranked != query_index]
 
-        # Les top_k voisins.
+        # The top_k neighbors.
         top_indices = ranked[:top_k]
 
-        # On compte combien de ces voisins sont dans la même section.
+        # Count how many of these neighbors belong to the same section.
         goods = sum(
             1 for index in top_indices
             if labels[int(index)] == topic
@@ -247,20 +245,20 @@ def ratio_quality(similarity_for_query, labels, topic, top_k=TOP_K,
 
     elapsed = time.perf_counter() - start
 
-    # Formule exacte du pseudo-code.
+    # Exact formula from the pseudocode.
     quality = total_goods / (len(query_indices) * top_k)
 
     return quality, elapsed, total_goods
 
 
 def parse_tags(raw_tags):
-    """Transforme "Taste ,rice, dessert" en {"taste", "rice", "dessert"}.
+    """Convert "Taste ,rice, dessert" into {"taste", "rice", "dessert"}.
 
-    On met en minuscules et on enlève les espaces pour que les tags soient
-    comparables même si le CSV contient des espaces irréguliers.
+    Lowercase and strip whitespace so tags are comparable even if the
+    CSV contains inconsistent spacing.
     """
 
-    # Si le champ est vide/NaN, il n'y a aucun tag à comparer.
+    # If the field is empty/NaN, there are no tags to compare.
     if pd.isna(raw_tags):
         return set()
 
@@ -273,12 +271,12 @@ def parse_tags(raw_tags):
 
 
 def jaccard(tags_a, tags_b):
-    """Similarité de Jaccard entre deux ensembles de tags.
+    """Jaccard similarity between two sets of tags.
 
-    J(A, B) = |A ∩ B| / |A ∪ B|
+    J(A, B) = |A intersection B| / |A union B|
 
-    C'est une méthode naturelle pour des tags : elle vaut 1 si les deux
-    articles ont exactement les mêmes tags, et 0 s'ils n'en partagent aucun.
+    This is a natural method for tags: it equals 1 when both articles
+    have exactly the same tags, and 0 when they share none.
     """
 
     union = tags_a | tags_b
@@ -288,7 +286,7 @@ def jaccard(tags_a, tags_b):
 
 
 def tag_scores(query_index, tag_sets):
-    """Calcule la similarité Jaccard entre un article et tous les autres."""
+    """Compute Jaccard similarity between an article and all other articles."""
 
     query_tags = tag_sets[query_index]
     return np.array([
@@ -297,12 +295,59 @@ def tag_scores(query_index, tag_sets):
     ])
 
 
+def build_tag_tfidf(raw_tags):
+    """Build the TF-IDF model on tags and the similarity index.
+
+    Returns:
+    - `vectors`: the tag TF-IDF vectors for each article;
+    - `similarity`: the MatrixSimilarity object for cosine similarity;
+    - `elapsed`: preparation and indexing time in seconds.
+
+    Each complete tag is a vocabulary unit, even if it contains several
+    words. Only tags are used to build the model.
+
+    Timing includes tag normalization, dictionary creation, TF-IDF
+    calculation, and index construction.
+    """
+
+    start = time.perf_counter()
+
+    # 1. Normalize tags using the same function as for Jaccard.
+    # A complete tag remains one token: "climate change" is not split.
+    # Sorting gives the tags in each set a stable order.
+    texts = [sorted(parse_tags(tags)) for tags in raw_tags]
+
+    # 2. Dictionary: map each complete tag to an integer identifier.
+    # Keep all tags; IDF reduces the weight of the most frequent ones.
+    dictionary = corpora.Dictionary(texts)
+
+    # 3. Bag-of-Words: each article becomes a list of (tag_id, frequency).
+    # parse_tags returns a set: each tag appears at most once.
+    bow_corpus = [dictionary.doc2bow(tags) for tags in texts]
+
+    # 4. TF-IDF: tags that are rare in the corpus receive more weight.
+    # normalize=True gives nonzero vectors a norm of 1.
+    tfidf_model = models.TfidfModel(bow_corpus, normalize=True)
+    tfidf_vectors = list(tfidf_model[bow_corpus])
+
+    # 5. Cosine similarity index for the articles' TF-IDF vectors.
+    # num_features fixes the dimension even if some IDF weights are zero.
+    # If no tags exist, the index contains only zero vectors.
+    # max(1, ...) then provides the minimum dimension required by Gensim.
+    similarity = similarities.MatrixSimilarity(
+        tfidf_vectors, num_features=max(1, len(dictionary))
+    )
+
+    elapsed = time.perf_counter() - start
+    return tfidf_vectors, similarity, elapsed
+
+
 def print_topic_results(model_name, labels, similarity_for_query,
                         model_creation_time):
-    """Affiche les résultats pour les deux sections demandées."""
+    """Display results for the two requested sections."""
 
     print(f"\n--- {model_name} ---")
-    print(f"Temps de création du modèle : {model_creation_time:.2f} s")
+    print(f"Model creation time: {model_creation_time:.2f} s")
 
     for topic in (FOOD_TOPIC, SPORTS_TOPIC):
         quality, pseudo_time, total_goods = ratio_quality(
@@ -311,31 +356,31 @@ def print_topic_results(model_name, labels, similarity_for_query,
         print(
             f"  {topic} : ratio_quality = {quality:.4f} "
             f"(total_goods = {total_goods}, "
-            f"pseudo-code = {pseudo_time:.2f} s)"
+            f"pseudocode = {pseudo_time:.2f} s)"
         )
 
 
 def main():
-    """Point d'entrée du programme."""
+    """Program entry point."""
 
-    print("Chargement des données...")
+    print("Loading data...")
     df = load_data()
     descriptions = df["description"].tolist()
     labels = df["article_section"].tolist()
 
-    print(f"{len(df)} articles utilisables")
+    print(f"{len(df)} usable articles")
     print(f"{labels.count(FOOD_TOPIC)} articles 'Food & Drink'")
     print(f"{labels.count(SPORTS_TOPIC)} articles 'Sports'")
 
     # ------------------------------------------------------------------
-    # Tâche 1 : TF-IDF
+    # Task 1: TF-IDF
     # ------------------------------------------------------------------
-    print("\n=== Tâche 1 : TF-IDF ===")
+    print("\n=== Task 1: TF-IDF ===")
     tfidf_vectors, tfidf_similarity, tfidf_time = build_tfidf(descriptions)
 
-    # On passe une petite fonction à ratio_quality pour qu'il puisse récupérer
-    # les scores d'un article donné. Cela évite de dupliquer le pseudo-code
-    # pour TF-IDF, LDA et les tags.
+    # Pass a small function to ratio_quality so it can retrieve the scores
+    # for a given article. This avoids duplicating the pseudocode for
+    # TF-IDF, LDA, and tags.
     print_topic_results(
         "TF-IDF",
         labels,
@@ -344,9 +389,9 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # Tâche 2 : LDA
+    # Task 2: LDA
     # ------------------------------------------------------------------
-    print("\n=== Tâche 2 : LDA (30 topics, 2 passes, random_state=30) ===")
+    print("\n=== Task 2: LDA (30 topics, 2 passes, random_state=30) ===")
     lda_vectors, lda_similarity, lda_time = build_lda(descriptions)
 
     print_topic_results(
@@ -357,33 +402,57 @@ def main():
     )
 
     # ------------------------------------------------------------------
-    # Tâche 3 : Sports vs Food & Drink
+    # Task 3: Sports vs Food & Drink
     # ------------------------------------------------------------------
-    # Les résultats "Sports" sont déjà affichés dans les deux sections
-    # précédentes. Il suffit de comparer les deux lignes pour répondre à la
-    # question 3 : le ratio Sports est plus faible car le vocabulaire sportif
-    # recoupe souvent la politique, le divertissement ou les célébrités.
-    print("\n=== Tâche 3 ===")
-    print("Comparer les lignes 'Sports' et 'Food & Drink' ci-dessus.")
+    # The "Sports" results are already displayed in the two preceding
+    # sections. Compare the two lines to answer question 3:
+    # the Sports ratio is lower because sports vocabulary often overlaps
+    # with politics, entertainment, or celebrities.
+    print("\n=== Task 3 ===")
+    print("Compare the 'Sports' and 'Food & Drink' lines above.")
 
     # ------------------------------------------------------------------
-    # Tâche 4 : similarité par tags (Jaccard)
+    # Task 4: tag similarity (Jaccard and TF-IDF + cosine)
     # ------------------------------------------------------------------
-    print("\n=== Tâche 4 : similarité par tags (Jaccard) ===")
+    print("\n=== Task 4: Jaccard vs TF-IDF on tags ===")
+
+    # Use the same corpus for both methods, retaining articles without tags.
+    start = time.perf_counter()
     tag_sets = [parse_tags(tags) for tags in df["tags"]]
+    jaccard_time = time.perf_counter() - start
 
-    print_topic_results(
-        "Tags - Jaccard",
-        labels,
-        lambda index: tag_scores(index, tag_sets),
-        0.0,  # pas de modèle à entraîner, donc pas de temps de création
-    )
+    tag_vectors, tag_similarity, tag_tfidf_time = build_tag_tfidf(df["tags"])
+    print(f"Jaccard preparation time: {jaccard_time:.2f} s")
+    print(f"Tag TF-IDF preparation/indexing time: {tag_tfidf_time:.2f} s")
+
+    for topic in (FOOD_TOPIC, SPORTS_TOPIC):
+        # Identical settings, following the assignment pseudocode.
+        jaccard_quality, jaccard_eval_time, _ = ratio_quality(
+            lambda index: tag_scores(index, tag_sets),
+            labels, topic, top_k=TOP_K, exclude_self=False,
+        )
+        tfidf_quality, tfidf_eval_time, _ = ratio_quality(
+            lambda index: tag_similarity[tag_vectors[index]],
+            labels, topic, top_k=TOP_K, exclude_self=False,
+        )
+        print(f"\n  {topic} (top-{TOP_K}) :")
+        print(
+            f"    Jaccard : ratio_quality = {jaccard_quality:.4f} "
+            f"(calculation = {jaccard_eval_time:.2f} s)"
+        )
+        print(
+            f"    Tag TF-IDF + cosine: ratio_quality = {tfidf_quality:.4f} "
+            f"(calculation = {tfidf_eval_time:.2f} s)"
+        )
+        print(
+            f"    Difference (Tag TF-IDF - Jaccard): "
+            f"{tfidf_quality - jaccard_quality:+.4f}"
+        )
 
     print(
-        "\nRemarque : les tags sont des métadonnées fiables, mais deux "
-        "articles proches peuvent ne partager aucun tag exact. Pour améliorer "
-        "les résultats, on pourrait normaliser les synonymes, utiliser une "
-        "hiérarchie de tags, ou combiner similarité texte + tags."
+        "\nNote: TF-IDF gives more weight to shared rare tags "
+        "than to very frequent tags. Any improvement depends on the measured "
+        "results; two articles with no shared tags still have zero similarity."
     )
 
 
